@@ -42,8 +42,6 @@ Plain Kotlin/JVM library, written KMP-safe so promotion to Kotlin Multiplatform 
 - Public API documented with KDoc; favor small functions and clear names (Clean Code / SOLID).
 
 ## Commands
-<!-- Confirm/fill these after the scaffolding task lands; exact task names depend on the
-     Gradle plugins you add. -->
 - Build:    `./gradlew build`
 - Test:     `./gradlew test`
 - Lint:     `./gradlew ktlintCheck`
