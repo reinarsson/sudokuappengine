@@ -40,6 +40,9 @@ Plain Kotlin/JVM library, written KMP-safe so promotion to Kotlin Multiplatform 
 - Formatting / lint: ktlint must pass.
 - Coverage: Kover, ≥ 80%.
 - Public API documented with KDoc; favor small functions and clear names (Clean Code / SOLID).
+- **README.md must be created (if absent) or updated** whenever the public API, build setup, or
+  usage instructions change. It should cover: what the library does, build/test commands, the
+  public contract (`SudokuSolver`, `SolveResult`), and a minimal usage example.
 
 ## Commands
 - Build:    `./gradlew build`
