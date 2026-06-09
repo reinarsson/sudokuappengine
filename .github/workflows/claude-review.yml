@@ -1,0 +1,127 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  claude-review:
+    name: Review with Claude
+    if: false # disabled — remove this line to re-enable
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install anthropic
+
+      - name: Get PR diff
+        id: diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
+          echo "Diff captured: $(wc -l < pr_diff.txt) lines"
+
+      - name: Run Claude review
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.MY_GITHUB_CLAUDE_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+        run: |
+          python3 << PYTHON
+          import anthropic
+          import os
+
+          with open("pr_diff.txt", "r") as f:
+              diff = f.read()
+
+          DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+          DEFAULT_MAX_TOKENS = 2048
+
+          model = os.environ.get("CLAUDE_MODEL", "").strip() or DEFAULT_MODEL
+          try:
+              max_tokens = int(os.environ.get("CLAUDE_MAX_TOKENS", DEFAULT_MAX_TOKENS))
+              if max_tokens <= 0:
+                  raise ValueError
+          except ValueError:
+              max_tokens = DEFAULT_MAX_TOKENS
+
+          if not diff.strip():
+              review = "No changes detected in this PR."
+          else:
+              client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+              try:
+                  message = client.messages.create(
+                      model=model,
+                      max_tokens=max_tokens,
+                      messages=[
+                          {
+                              "role": "user",
+                              "content": f"""You are a senior Kotlin engineer reviewing a pull request for a pure-Kotlin Sudoku solving library.
+
+          Review the following diff against these standards:
+          - Clean Code / SOLID principles (clear naming, small focused functions, no magic numbers)
+          - Pure Kotlin / KMP-safe: no java.* or android.* imports in production code
+          - Zero third-party dependencies — standard library only
+          - Tests use kotlin.test (not JUnit APIs)
+          - Determinism and immutability: solver must not mutate the caller's input grid
+          - KDoc on all public API members; internal helpers may omit it
+          - Bitmask + MRV backtracking algorithm correctness (row/col/box masks, candidate selection)
+          - Input validation completeness (grid dimensions, value range, duplicate givens)
+          - ktlint formatting compliance
+
+          Format your response as:
+          ## Summary
+          One sentence overall assessment.
+
+          ## Issues
+          List each issue as: [CRITICAL|WARNING|SUGGESTION] filename:line — description
+
+          ## Positives
+          What was done well.
+
+          Diff to review:
+          {diff}"""
+                          }
+                      ]
+                  )
+                  review = message.content[0].text
+              except anthropic.APIStatusError as e:
+                  review = f"Claude review failed: {e.status_code} {e.message}"
+              except anthropic.APIConnectionError:
+                  review = "Claude review failed: could not connect to the Anthropic API."
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("REVIEW<<EOF\n")
+              f.write(review + "\n")
+              f.write("EOF\n")
+
+          print("Review complete.")
+          PYTHON
+
+      - name: Post review comment
+        uses: actions/github-script@v7
+        env:
+          REVIEW: ${{ steps.review.outputs.REVIEW }}
+        with:
+          script: |
+            const review = process.env.REVIEW;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🤖 Claude Code Review\n\n${review}\n\n---\n*Reviewed by Claude (worker agent) · [View workflow run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})*`
+            });
