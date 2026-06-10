@@ -35,6 +35,11 @@ jobs:
       - name: Build + unit tests + coverage
         run: ./gradlew -p reader assembleDebug testDebugUnitTest koverVerify
 
+      # Package the instrumented-test APK on the cheap runner (no emulator) so packaging issues
+      # surface here with a stacktrace instead of inside the slow emulator job.
+      - name: Assemble instrumented-test APK
+        run: ./gradlew -p reader assembleDebugAndroidTest --stacktrace
+
   oracle:
     name: Instrumented oracle (emulator)
     runs-on: ubuntu-latest
@@ -75,4 +80,4 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: ./gradlew -p reader connectedDebugAndroidTest
+          script: ./gradlew -p reader connectedDebugAndroidTest --stacktrace
