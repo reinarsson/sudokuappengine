@@ -34,7 +34,9 @@ sealed interface ReadOutcome {
 /**
  * A single-cell digit prediction.
  *
- * @property digit the recognised digit, in `1..9` (empty cells never reach the classifier).
+ * @property digit the digit recognised by the model. The model classifies `0..9`; empty cells
+ *   are filtered before classification and Sudoku cells never contain `0`, so in practice this
+ *   is `1..9`.
  * @property confidence the model's confidence for [digit], in `0f..1f`.
  */
 data class Prediction(val digit: Int, val confidence: Float)
