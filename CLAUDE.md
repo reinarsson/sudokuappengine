@@ -15,6 +15,26 @@ truth; this file holds only the rules that apply across every task.
 Plain Kotlin/JVM library, written KMP-safe so promotion to Kotlin Multiplatform is cheap later.
 <!-- If you want KMP from day one instead, change this line and the source-set layout. -->
 
+## Agent team & delegation policy
+This repo uses a tiered agent team. Run the **lead session on Opus** — it is the orchestrator.
+
+Roles (workers defined in `.claude/agents/`):
+- **Orchestrator** — this lead session (Opus). Plans the work, splits it, dispatches to
+  workers, reviews their output, sequences PRs. Does not write code directly when a worker can.
+- **coder** (Sonnet) — implements features and tests per `docs/SPEC.md`.
+- **standards-checker** (Haiku) — runs lint/coverage and reviews against these standards;
+  reports issues only, never edits code.
+
+Policy:
+- For any implementation task, delegate the coding to the `coder` subagent rather than writing
+  it in the lead session.
+- After the coder reports done, dispatch the `standards-checker` **before** opening a PR. All
+  `[CRITICAL]` findings must be resolved (by the coder) before the PR opens.
+- Split genuinely independent work (separate modules or file groups) across parallel `coder`
+  subagents; keep tightly-coupled work in a single one.
+- One concern per PR; never push to `main`; workers stay within their assigned scope and do not
+  modify the public contract or existing passing code without explicit instruction.
+
 ## Standing constraints (apply to every task)
 - **Zero third-party dependencies.** Standard library only. No solver/optimization libraries —
   OR-Tools, Choco-solver, ojAlgo, etc. are explicitly banned (JVM/JNI-only, and they break the

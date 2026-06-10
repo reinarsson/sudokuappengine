@@ -32,9 +32,47 @@ jobs:
       - name: Lint (ktlint)
         run: ./gradlew -p reader ktlintCheck
 
-      - name: Build + unit tests
-        run: ./gradlew -p reader assembleDebug testDebugUnitTest
+      - name: Build + unit tests + coverage
+        run: ./gradlew -p reader assembleDebug testDebugUnitTest koverVerify
 
-  # The end-to-end oracle is an Android instrumented test: it needs an emulator AND the committed
-  # src/main/assets/digits.tflite. Added with the pipeline implementation (uses
-  # reactivecircus/android-emulator-runner + ./gradlew -p reader connectedDebugAndroidTest).
+  oracle:
+    name: Instrumented oracle (emulator)
+    runs-on: ubuntu-latest
+    # Only spend emulator minutes once lint/build/unit tests pass.
+    needs: build
+    strategy:
+      matrix:
+        api-level: [ 29 ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      # The emulator needs hardware acceleration (KVM) to boot in reasonable time.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Runs the end-to-end oracle (OracleEndToEndTest), board-not-found, and empty-cell tests
+      # against the committed digits.tflite on a real emulator. This is the true correctness gate.
+      - name: Run instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: ./gradlew -p reader connectedDebugAndroidTest
