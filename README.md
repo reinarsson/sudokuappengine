@@ -1,12 +1,19 @@
 # Sudoku Engine
 
-A standalone, **pure-Kotlin** Sudoku-solving library. Input is a 9×9 integer grid; output is a
-solve result. No third-party dependencies, no platform APIs — written KMP-safe so promotion to
-Kotlin Multiplatform is cheap later.
+This repo contains two modules:
 
-> Computer vision, the digit model, and the app live in **other** repos and are out of scope
-> here. See [`docs/SPEC.md`](docs/SPEC.md) for the full contract and [`CLAUDE.md`](CLAUDE.md) for
-> the standing constraints.
+- **Solver** (repo root) — a standalone, **pure-Kotlin** Sudoku-solving library. Input is a 9×9
+  integer grid; output is a solve result. No third-party dependencies, no platform APIs — written
+  KMP-safe so promotion to Kotlin Multiplatform is cheap later.
+- **`:reader`** ([`reader/`](reader/README.md)) — an Android library that turns a photo/screenshot
+  of a Sudoku board into a 9×9 grid (OpenCV + LiteRT). It is a **separate Gradle build** (run with
+  `./gradlew -p reader …`), so it doesn't affect the pure-Kotlin solver build below. See its README.
+
+> The app lives in a **separate** repo and is out of scope here. See [`docs/SPEC.md`](docs/SPEC.md)
+> for the full contracts and [`CLAUDE.md`](CLAUDE.md) for the standing constraints.
+
+The rest of this README documents the **solver**; the reader is documented in
+[`reader/README.md`](reader/README.md).
 
 ## Usage
 
@@ -57,7 +64,8 @@ always produces identical output.
 | Lint     | `./gradlew ktlintCheck`  |
 | Coverage | `./gradlew koverVerify`  |
 
-Requires a JDK 21 toolchain.
+Requires a JDK 21 toolchain. These build the **solver** only; the reader is a separate build —
+use `./gradlew -p reader …` (see [`reader/README.md`](reader/README.md)).
 
 ## Test oracle
 
