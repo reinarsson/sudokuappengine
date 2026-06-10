@@ -5,8 +5,9 @@ Kotlin/Android port of the Python `sudoku_reader.py` pipeline; it depends on nat
 **LiteRT**, so — unlike the solver — it is an Android module, not pure-Kotlin/KMP. The full contract
 is in [`../docs/SPEC.md`](../docs/SPEC.md).
 
-> **Status:** scaffold. The public API below compiles as stubs; the pipeline
-> (findBoard → splitCells → preprocessCell → classify → assemble) is implemented separately.
+> **Status:** implemented. The pipeline (findBoard → splitCells → preprocessCell → classify →
+> assemble) is in place, backed by OpenCV and LiteRT adapters, with unit tests for the
+> non-vision logic and an instrumented end-to-end oracle test.
 
 ## Build & test
 

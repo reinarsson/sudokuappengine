@@ -1,141 +1,153 @@
-# Sudoku Solver — Implementation Spec (pure Kotlin)
+# Sudoku Reader — Implementation Spec (image → 9×9 matrix)
 
-> **How to use this file:** this is the task spec for a standalone repository whose sole
-> purpose is the Sudoku-solving engine. Repo-wide conventions (Kotlin version, formatting,
-> coverage gate, build/test commands) belong in `CLAUDE.md` at the repo root; this file
-> describes *what to build* and *the contract it must meet*.
+> **How to use this file:** task spec for the module that turns a photo of a Sudoku board
+> into a 9×9 integer matrix. It is the Kotlin/Android port of the Python `sudoku_reader.py`
+> pipeline, and it replaces the `opencv-python` and `numpy` dependencies. Repo/module-wide
+> conventions live in `CLAUDE.md`; this file is the contract.
 
 ## Context & scope
-This repository **is** the Sudoku engine — a self-contained library. The following live in
-**other** projects and are **out of scope here**; do not build, import, or assume access to
-them:
-- the OCR / image pipeline (OpenCV), the digit model (LiteRT), and the Android/iOS app;
-- the original Python `pulp`-based solver (it serves only as the source of the test oracle —
-  see *Tests*).
+This module lives in the **platform (Android) layer** — unlike the solver, it is *not*
+dependency-free and *not* KMP-shared, because it depends on native OpenCV and the LiteRT
+runtime. Out of scope here:
+- camera capture and any UI — input is an already-encoded image (see contract);
+- the solver — it lives in its own repo and is consumed downstream by the app, not by this module;
+- the **confidence gate and "ask the user to retake"** decision — this module *reports*
+  per-cell confidence; the app decides what to do with it.
 
-The engine takes a grid of integers and returns a result. Nothing else.
+**Operating assumption (carried over, keep it):** the photo is roughly upright and the board is
+the largest object in frame. No 90°/180° orientation handling and no heavy-skew correction
+beyond the perspective warp. Document this limit; don't try to exceed it in this task.
 
-## Confirm before starting — one decision
-Choose the target shape and **state it at the top of `CLAUDE.md`** so every agent shares the
-assumption (the rest of this spec is identical either way):
-- **(a) Plain Kotlin/JVM library now, written KMP-safe** so promotion is cheap later
-  — *recommended default*; or
-- **(b) Kotlin Multiplatform project from day one** with a `commonMain` source set.
+## Settled decisions
+- **Placement:** an Android library module in the app project, `:reader`.
+- **Input type:** encoded image **bytes** (JPEG/PNG, OpenCV-decodable) — *not* an
+  `android.graphics.Bitmap` — so the orchestration is testable without an emulator.
 
-## Hard constraints — do not violate
-- **Pure Kotlin, standard library only.** Do **NOT** add any dependency — no OR-Tools, no
-  Choco-solver, no ojAlgo, no other optimization/solver library. They are JVM/JNI-only and
-  would permanently block iOS sharing. The ILP formulation from the Python version is not
-  needed; a plain algorithm is faster here and has zero deps.
-- **No platform APIs** in production code. No `java.*`, no `android.*`. Must be
-  `commonMain`-compatible.
-- **Tests use `kotlin.test`**, not JVM-only JUnit APIs, so they too stay multiplatform-ready.
-- **No knowledge of the outside world.** The engine knows nothing about images, OCR, the
-  model, or any app. Input is a grid of integers; output is a result.
-- **Deterministic.** Identical input always produces identical output (required for the golden
-  tests). Use a fixed cell-ordering, not randomness.
-- **Pure / non-mutating.** Never mutate the caller's input grid. Return a new array.
-- **Stateless across calls.** A single solver instance must be safe to reuse repeatedly.
+## Dependencies — allowed here (the opposite of the solver rule)
+- **OpenCV Android SDK** — replaces `opencv-python`. Same C++ core, so the port is near 1:1.
+- **LiteRT** (Google AI Edge) — runs the digit model.
+- Nothing else without human approval. Keep these two **at the edges** (adapters), behind the
+  ports below, so the orchestration logic stays testable.
+
+## What replaces what
+- `opencv-python` → OpenCV Android SDK (`Imgproc.*` / `Core.*` on `Mat`).
+- `numpy` → plain Kotlin arrays (`IntArray`, `FloatArray`, `Array<IntArray>`) plus the
+  `FloatBuffer`/`ByteBuffer` that feeds LiteRT. No ndarray library.
 
 ## Public contract
 ```kotlin
-/**
- * A 9x9 Sudoku grid. Outer index = row (0..8), inner index = column (0..8).
- * 0 = empty cell; 1..9 = a filled digit.
- */
+/** 9x9 grid, 0 = empty, 1..9 = filled. Same type the solver consumes. */
 typealias Grid = Array<IntArray>
 
-sealed interface SolveResult {
-    /** A complete, valid solution. [grid] is a fresh array; the input is left untouched. */
-    data class Solved(val grid: Grid) : SolveResult
+/** Per-cell read confidence, 0f..1f; 0f for empty cells. */
+typealias ConfidenceGrid = Array<FloatArray>
 
-    /** Input is well-formed and rule-consistent, but no completion exists. */
-    data object Unsolvable : SolveResult
+data class ReadResult(val grid: Grid, val confidence: ConfidenceGrid)
 
-    /** Input is malformed, or the givens already break Sudoku rules (e.g. an OCR misread). */
-    data class Invalid(val reason: String) : SolveResult
+sealed interface ReadOutcome {
+    data class Success(val result: ReadResult) : ReadOutcome
+    /** No Sudoku board could be located in the image. */
+    data object BoardNotFound : ReadOutcome
 }
 
-interface SudokuSolver {
-    fun solve(puzzle: Grid): SolveResult
+interface SudokuReader {
+    /** @param image encoded JPEG/PNG bytes, decodable by OpenCV. */
+    fun read(image: ByteArray): ReadOutcome
 }
 ```
 
-**Why a sealed result, not a nullable `Grid?`:** the OCR pipeline (elsewhere) can hand the
-solver a grid that is internally contradictory — a misread digit duplicated in a row. The app
-needs to tell three cases apart: "the photo was read wrong" (`Invalid`), "this puzzle genuinely
-has no solution" (`Unsolvable`), and success (`Solved`). A bare `Grid?` collapses the first two.
-
-### Optional but recommended — ambiguity detection
+### Recommended internal seams (ports + adapters)
 ```kotlin
-/** True iff the puzzle has exactly one solution. Used to flag likely misreads. */
-fun hasUniqueSolution(puzzle: Grid): Boolean
+data class Prediction(val digit: Int, val confidence: Float)   // digit in 1..9
+
+/** The one clean seam: a 784-float cell ([0,1], white-on-black) -> a digit. */
+interface DigitClassifier {
+    fun classify(cell: FloatArray): Prediction
+}
 ```
-A correctly-read Sudoku has exactly one solution. If a puzzle has *multiple* solutions, a clue
-was almost certainly missed or misread — a cheap quality signal for the pipeline. Implement by
-searching for a second solution and stopping as soon as two are found.
+Implement `DigitClassifier` with a LiteRT adapter. Keeping it an interface lets the assembly
+and confidence logic be unit-tested with a **fake** classifier, no model or emulator needed.
 
-## Recommended algorithm
-**Backtracking with constraint propagation** (bitmask + Minimum Remaining Values):
-- Track used digits per row, per column, and per 3×3 box as 9-bit `Int` bitmasks, for O(1)
-  legality checks and updates.
-- Candidates for an empty cell: `(0x1FF) and (rowMask or colMask or boxMask).inv()`.
-- Choose the next cell to fill by **Minimum Remaining Values** (fewest candidates first). This
-  heuristic alone makes even hard puzzles solve in microseconds.
-- Propagate forced cells (exactly one candidate) before branching; recurse; undo on dead ends.
+## Pipeline stages (port of `sudoku_reader.py`)
+Mirror the Python stages and **reuse its parameter values** — don't reinvent them:
+1. **findBoard** — grayscale → Gaussian blur → `adaptiveThreshold` (inverse, block 11, C 2) →
+   `morphologyEx` close → `findContours` (external) → largest by area → `approxPolyDP` →
+   order 4 corners → `getPerspectiveTransform` + `warpPerspective` to a square. Fallback to the
+   contour's bounding box. No board found → `BoardNotFound`.
+2. **splitCells** — slice the square into 81 equal cells.
+3. **preprocessCell** — trim a ~12% margin → Otsu threshold → empty check by ink fraction in
+   the centre (empty → leave cell 0, never call the model) → largest contour bbox → centre on a
+   28×28 canvas → normalise to `[0,1]`, white-on-black.
+4. **classify** — feed each non-empty 784-float cell to `DigitClassifier`; record digit + confidence.
+5. **assemble** — build the 9×9 `Grid` and the matching `ConfidenceGrid`.
 
-No library is needed and this solves any 9×9 far faster than perceptible. An exact-cover /
-Dancing Links (Algorithm X) implementation is acceptable under the same contract, but default
-to bitmask + MRV backtracking — it is simpler and plenty fast.
+## Model & input contract (the #1 footgun)
+- The model is a committed asset at **`src/main/assets/digits.tflite`**. It is exported by the
+  `mnist-mlp-pytorch` repo (`convert_to_litert.py`, run by the maintainer) and committed into
+  this module. It is bundled into the app via the assets folder and loaded once at startup.
+  Agents must **not** train, convert, fetch, or fabricate it.
+- The cell handed to the model **must** match what `convert_to_litert.py` exported and the Python
+  `digit_io.py`: **28×28, single channel, values [0,1], digit white on black, centred.** Encode
+  the label mapping (`decode`: model index → 1..9) in one place and use it for inference; it must
+  equal what training used. A mismatch here produces "splits fine, every digit wrong."
 
-## Validation pre-check
-Before searching, validate the input and return `Invalid(reason)` when:
-- the grid is not 9×9, or any value is outside `0..9`; or
-- any non-zero given duplicates another in its row, column, or 3×3 box.
-
-This one cheap pass catches the most common OCR failure before any search runs.
+## Assets & fixtures — committed, maintainer-supplied (agents must not generate these)
+- **`src/main/assets/digits.tflite`** — the model. Ships in the app *and* is loaded by the oracle
+  test, so the test exercises the exact artifact that ships. Committed (a tiny MLP; plain git is
+  fine — no LFS needed).
+- **`src/androidTest/assets/samples/`** — the labelled board set, copied from
+  `sudokureader/tests/samples`. Each image is paired with a sibling JSON of the same basename:
+  ```
+  samples/board01.png   samples/board01.json
+  samples/board02.png   samples/board02.json
+  ```
+  Each `*.json` holds the expected result for that image in this format:
+  ```json
+  {
+    "grid": [[5,3,0,0,7,0,0,0,0], "... 9 rows of 9 ints ...", [0,0,0,0,8,0,0,7,9]],
+    "note": "0 = empty cell, 1-9 = digit. Row-major, top-left to bottom-right."
+  }
+  ```
+  `grid` is a 9×9 array of ints (`0` = empty), produced by the trusted Python pipeline; it
+  deserialises directly into the expected `Grid` with no string parsing. Ignore `note` — it's a
+  human comment. Test-only data: it is **not** bundled into the app. Keep the set small and
+  downscaled — ~10–20 representative boards.
 
 ## Performance target
-Solve any valid 9×9 — including known hard instances — in well under 10 ms on a mid-range
-phone (in practice sub-millisecond). No perceptible delay in the app.
+Whole pipeline (detect → preprocess → 81 cells inferred → assemble) comfortably under ~1 s on a
+mid-range phone; no perceptible lag in the app.
 
-## Tests — required (use `kotlin.test`)
-1. **Oracle / golden tests.** Load a fixture of `(puzzle, solution)` pairs from a committed
-   test resource (e.g. `src/test/resources/golden_puzzles.json`) and assert each `Solved.grid`
-   matches the expected solution exactly.
-   **This fixture is supplied externally: it is produced by the independent Python `pulp`
-   solver and committed into the repo by the maintainer. Do NOT generate, fabricate, or compute
-   these solutions — deriving them from the solver under test (or inventing them) makes the test
-   circular and worthless. If the fixture file is missing, still write the test to load that
-   path, and leave it pending/failing until the file is added; never substitute invented data.**
-2. **Already solved.** A complete valid grid returns `Solved` equal to itself.
-3. **Invalid input.** Duplicate given → `Invalid`; wrong dimensions → `Invalid`; out-of-range
-   value → `Invalid`.
-4. **Unsolvable.** A rule-consistent but uncompletable grid → `Unsolvable`.
-5. **Hard cases.** A handful of known worst-case-style puzzles, confirming the search stays
-   fast and correct. (These may also come from the external fixture.)
-6. **Input immutability.** After `solve`, the caller's input array is unchanged.
-7. **Determinism.** Solving the same puzzle twice yields identical output.
-8. **Uniqueness** *(if implemented)*. A proper puzzle reports `true`; the same puzzle with one
-   clue removed (now ambiguous) reports `false`.
+## Tests — required
+1. **End-to-end oracle (primary).** For each `samples/*.png`, `read(bytes)` returns `Success`
+   whose `grid` **exactly** matches the `grid` array in the sibling `*.json`. This is the real
+   correctness gate. Runs as an **Android instrumented test** (OpenCV + LiteRT need the runtime);
+   it loads the bundled `digits.tflite` and the `androidTest` sample assets, pairing each image
+   with its JSON by basename.
+2. **Board-not-found.** An image with no board → `BoardNotFound`.
+3. **Empty-cell handling.** Cells the Python pipeline marks empty come back as `0`, and the model
+   is never invoked on them.
+4. **Assembly logic (unit, with a fake `DigitClassifier`).** Given canned predictions, the `Grid`
+   and `ConfidenceGrid` are assembled correctly — pure JVM, no model/emulator needed.
+5. **Confidence surfaced.** `confidence` is populated for filled cells, `0f` for empty.
+6. *(Optional, diagnostic)* **Per-cell parity.** Preprocessed 28×28 cells match the Python
+   `preprocess_cell` output within a tolerance (mean abs error), to localise drift. **Not**
+   pixel-exact — OpenCV results differ slightly across versions/platforms, so the *matrix* is the
+   exact oracle, the *images* are compared within tolerance.
 
-> **Empty grid note:** an all-zeros grid has many valid solutions, so do **not** assert a
-> specific solution for it — assert only that the result is a valid completed grid.
-
-## Repository setup
-- This repo *is* the engine; set it up as a standalone Kotlin library built with Gradle (Kotlin
-  DSL), per the decision recorded in `CLAUDE.md`.
-- **One agent scaffolds first.** The Gradle wrapper, build files, source-set layout, and CI
-  must be created and committed by a single setup task **before** parallel work begins. Do not
-  let multiple agents each scaffold the build — they will conflict.
-- Keep the public surface to exactly the types in *Public contract*; mark everything else
-  `internal`.
+## Architecture & module setup
+- Hexagonal: orchestrator depends on the `DigitClassifier` port; OpenCV and LiteRT are adapters
+  at the edge. No `android.graphics.*` in the orchestrator — input is bytes, output is the result.
+- No camera, no UI, no solver code in this module.
+- OpenCV native libs and the `assets/` wiring are set up by a single setup step; subsequent agents
+  don't re-do build setup.
 
 ## Definition of done
-- [ ] `SudokuSolver.solve` implemented per contract, pure Kotlin, zero third-party dependencies.
-- [ ] Input validation returns `Invalid` with a clear, human-readable reason.
-- [ ] All required tests pass (using `kotlin.test`), including the externally-supplied PuLP
-      oracle fixture.
-- [ ] Caller's input grid is never mutated; output is deterministic.
-- [ ] No `java.*` / `android.*` / platform imports anywhere in production code.
-- [ ] Build and test commands documented in `README.md` / `CLAUDE.md`.
+- [ ] `SudokuReader.read` implemented to the contract; `BoardNotFound` handled.
+- [ ] OpenCV stages mirror `sudoku_reader.py` and reuse its parameters.
+- [ ] Model loaded from `src/main/assets/digits.tflite`; input contract (28×28, 1-channel, [0,1],
+      white-on-black, `decode` mapping) matches `convert_to_litert.py` / `digit_io.py`.
+- [ ] End-to-end oracle passes on the committed `src/androidTest/assets/samples/` set; assembly
+      unit tests pass with a fake classifier.
+- [ ] Empty cells resolve to `0` without invoking the model; confidence surfaced per cell.
+- [ ] OpenCV/LiteRT confined to adapters; no UI/camera/solver code; only the two approved
+      dependencies.
