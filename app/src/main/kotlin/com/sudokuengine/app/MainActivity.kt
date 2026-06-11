@@ -10,8 +10,8 @@ import com.sudokuengine.app.ui.HomeScreen
 /**
  * Single-activity entry point for the Sudoku app.
  *
- * Shows [HomeScreen], which lets the user pick an image from the gallery. The
- * camera capture → reader → solver → result pipeline is added in follow-up PRs (see
+ * Shows [HomeScreen], which lets the user pick an image from the gallery or take a photo with
+ * the camera. The reader → solver → result pipeline is added in follow-up PRs (see
  * `docs/APP_SPEC.md`).
  */
 class MainActivity : ComponentActivity() {

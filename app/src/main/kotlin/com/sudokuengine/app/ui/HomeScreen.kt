@@ -42,11 +42,12 @@ fun imageStatusText(imageBytes: ByteArray?): String =
     }
 
 /**
- * Home screen of the Sudoku app: lets the user pick an image from the device gallery and
- * shows a placeholder status confirming the image bytes were read.
+ * Home screen of the Sudoku app: lets the user pick an image from the device gallery or
+ * capture one with the camera, and shows a placeholder status confirming the image bytes
+ * were read.
  *
  * The reader/solver pipeline is wired up in a follow-up PR (see `docs/APP_SPEC.md`); for now
- * this screen only proves the file-picker entry point works end to end.
+ * this screen only proves the file-picker and camera-capture entry points work end to end.
  */
 @Composable
 fun HomeScreen() {
@@ -94,6 +95,7 @@ fun HomeScreen() {
                         Text(text = "Pick image from gallery")
                     }
                     Text(text = statusText)
+                    CameraCaptureButton()
                 }
             }
         }
