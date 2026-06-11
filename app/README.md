@@ -31,8 +31,11 @@ Requires the Android SDK (`ANDROID_HOME`, or `local.properties` with `sdk.dir`).
   pure status helpers.
 - `ui/` (planned) — additional Compose screens and the `SudokuGrid` composable for rendering a
   solved board.
-- `pipeline/` (planned) — small testable orchestration class wrapping `SudokuReader.read()` and
-  `SudokuSolver.solve()`.
+- `pipeline/SolvePipeline.kt` — small testable orchestration class wrapping `SudokuReader.read()`
+  and `SudokuSolver.solve()`, mapping their outcomes to a `PipelineResult` sealed type
+  (`Success` with both the original and solved grids, `BoardNotFound`, `Unsolvable`, `Invalid`).
+  Constructor-injected dependencies, unit-tested with a fake reader and the real solver. Not yet
+  wired into `MainActivity`/`HomeScreen` — that's a follow-up PR.
 
 See [`../docs/APP_SPEC.md`](../docs/APP_SPEC.md) for the full contract, pipeline, and definition
 of done.
