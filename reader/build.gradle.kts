@@ -7,6 +7,9 @@ plugins {
     id("org.jetbrains.kotlinx.kover") version "0.7.6"
 }
 
+group = "com.sudokuengine"
+version = "0.1.0-SNAPSHOT"
+
 android {
     namespace = "com.sudokuengine.reader"
     compileSdk = 34
