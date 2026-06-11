@@ -1,6 +1,6 @@
 # Sudoku Engine
 
-This repo contains two modules:
+This repo contains three modules:
 
 - **Solver** (repo root) — a standalone, **pure-Kotlin** Sudoku-solving library. Input is a 9×9
   integer grid; output is a solve result. No third-party dependencies, no platform APIs — written
@@ -8,12 +8,16 @@ This repo contains two modules:
 - **`:reader`** ([`reader/`](reader/README.md)) — an Android library that turns a photo/screenshot
   of a Sudoku board into a 9×9 grid (OpenCV + LiteRT). It is a **separate Gradle build** (run with
   `./gradlew -p reader …`), so it doesn't affect the pure-Kotlin solver build below. See its README.
+- **`:app`** ([`app/`](app/README.md)) — a Compose Android app: pick or capture a photo of a
+  Sudoku board, read it via `:reader`, solve it via the solver above, and display the solved
+  board. It is also a **separate Gradle build** (run with `./gradlew -p app …`). See its README
+  and [`docs/APP_SPEC.md`](docs/APP_SPEC.md) for the contract.
 
-> The app lives in a **separate** repo and is out of scope here. See [`docs/SPEC.md`](docs/SPEC.md)
-> for the full contracts and [`CLAUDE.md`](CLAUDE.md) for the standing constraints.
+See [`docs/SPEC.md`](docs/SPEC.md) for the solver and `:reader` contracts, and
+[`CLAUDE.md`](CLAUDE.md) for the standing constraints.
 
 The rest of this README documents the **solver**; the reader is documented in
-[`reader/README.md`](reader/README.md).
+[`reader/README.md`](reader/README.md), and the app in [`app/README.md`](app/README.md).
 
 ## Usage
 
