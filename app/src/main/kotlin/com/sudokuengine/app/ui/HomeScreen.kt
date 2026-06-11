@@ -37,22 +37,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Returns the status text shown to the user after a gallery picker round-trip.
- *
- * - `null` means the user has not picked anything yet (or cancelled the picker), and is
- *   reported as "No image selected".
- * - A non-null [imageBytes] reports its size, e.g. "Selected image: 1234 bytes".
- *
- * This function is pure and platform-independent so it can be unit-tested without Android.
- */
-fun imageStatusText(imageBytes: ByteArray?): String =
-    if (imageBytes == null) {
-        "No image selected"
-    } else {
-        "Selected image: ${imageBytes.size} bytes"
-    }
-
-/**
  * Builds a [SolvePipeline] backed by the real [OpenCvSudokuReader] (using the bundled
  * `digits.tflite` model from `:reader`'s assets) and the default [SudokuSolver].
  *

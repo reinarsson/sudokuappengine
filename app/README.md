@@ -31,15 +31,15 @@ Requires the Android SDK (`ANDROID_HOME`, or `local.properties` with `sdk.dir`).
 - `ui/HomeScreen.kt` — home screen: builds the `SolvePipeline` (real `OpenCvSudokuReader` +
   `LiteRtDigitClassifier`, loading `digits.tflite` from `:reader`'s bundled assets, and the
   default `SudokuSolver`), wires the gallery picker and camera capture to it, and renders each
-  `AppScreenState`. Also has the `imageStatusText` helper.
+  `AppScreenState`.
 - `ui/AppScreenState.kt` — the screen-state sealed interface (`Idle`, `Loading`, `Result`,
   `Error`) and `errorMessageFor`, the pure `PipelineResult` -> user-facing error message mapping
   ("No board found", "No solution", or the solver's `Invalid` reason).
 - `ui/SudokuGrid.kt` — pure Compose `Canvas` composable rendering a 9x9 board: thin lines
   between cells, thick lines around each 3x3 box, given cells in bold black vs. solver-filled
   cells in a different color/weight.
-- `ui/CameraCaptureButton.kt`, `ui/CaptureStatus.kt` — camera capture entry point (reports
-  captured bytes via a callback) and its pure status helpers.
+- `ui/CameraCaptureButton.kt` — camera capture entry point; reports captured bytes via a
+  callback, with no separate status text (feedback is solely via `AppScreenState`).
 - `pipeline/SolvePipeline.kt` — small testable orchestration class wrapping `SudokuReader.read()`
   and `SudokuSolver.solve()`, mapping their outcomes to a `PipelineResult` sealed type
   (`Success` with both the original and solved grids, `BoardNotFound`, `Unsolvable`, `Invalid`).
