@@ -29,13 +29,13 @@ import java.io.File
  *
  * Handles the `CAMERA` runtime permission and the [ActivityResultContracts.TakePicture] flow:
  * a temporary file in [Context.getCacheDir] is exposed via `FileProvider` as the capture
- * target, and on success its bytes are read back and summarised via [captureStatusFor].
+ * target, and on success its bytes are read back, summarised via [captureStatusFor], and
+ * passed to [onImageCaptured].
  *
- * No reader/solver pipeline is wired up here (see `docs/APP_SPEC.md`); this only proves that
- * image bytes can be captured.
+ * @param onImageCaptured invoked with the captured image's bytes on a successful capture.
  */
 @Composable
-fun CameraCaptureButton() {
+fun CameraCaptureButton(onImageCaptured: (ByteArray) -> Unit = {}) {
     val context = LocalContext.current
 
     var captureStatus by rememberSaveable { mutableStateOf<String?>(null) }
@@ -44,12 +44,13 @@ fun CameraCaptureButton() {
     val takePictureLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
             val file = pendingCaptureFile
-            captureStatus =
-                if (success && file != null) {
-                    captureStatusFor(file.readBytes())
-                } else {
-                    CAPTURE_CANCELLED
-                }
+            if (success && file != null) {
+                val bytes = file.readBytes()
+                captureStatus = captureStatusFor(bytes)
+                onImageCaptured(bytes)
+            } else {
+                captureStatus = CAPTURE_CANCELLED
+            }
         }
 
     val requestPermissionLauncher =
