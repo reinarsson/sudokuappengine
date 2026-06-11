@@ -42,6 +42,9 @@ kotlin {
 }
 
 dependencies {
+    implementation("com.sudokuengine:sudokuengine:0.1.0-SNAPSHOT")
+    implementation("com.sudokuengine:reader:0.1.0-SNAPSHOT")
+
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
