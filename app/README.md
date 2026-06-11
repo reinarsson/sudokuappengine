@@ -5,9 +5,10 @@ The Compose Android application: pick or capture a photo of a Sudoku board, read
 [`../docs/APP_SPEC.md`](../docs/APP_SPEC.md).
 
 > **Status:** in progress. The home screen has a "pick image from gallery" entry point
-> (`PickVisualMedia`) that reads the selected image into bytes and shows a placeholder status.
-> It is **not yet wired up** to `:reader` or the root solver — that's a follow-up PR. See
-> `docs/APP_SPEC.md` for the planned pipeline and architecture.
+> (`PickVisualMedia`) and a "take photo" entry point (`TakePicture` + `FileProvider`, with
+> `CAMERA` runtime permission handling); both read the resulting image into bytes and show a
+> placeholder status. It is **not yet wired up** to `:reader` or the root solver — that's a
+> follow-up PR. See `docs/APP_SPEC.md` for the planned pipeline and architecture.
 
 ## Build & test
 
@@ -26,6 +27,8 @@ Requires the Android SDK (`ANDROID_HOME`, or `local.properties` with `sdk.dir`).
 
 - `MainActivity.kt` — single-activity Compose entry point.
 - `ui/HomeScreen.kt` — home screen with the gallery image picker and `imageStatusText` helper.
+- `ui/CameraCaptureButton.kt`, `ui/CaptureStatus.kt` — camera capture entry point and its
+  pure status helpers.
 - `ui/` (planned) — additional Compose screens and the `SudokuGrid` composable for rendering a
   solved board.
 - `pipeline/` (planned) — small testable orchestration class wrapping `SudokuReader.read()` and
